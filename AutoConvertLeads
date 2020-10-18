@@ -1,0 +1,226 @@
+public class AutoConvertLeads {
+    
+    public static void LeadAssign(List<Lead> leadList){
+        
+        
+        List<ID> accountIds = new List<ID>();
+        
+        
+        for(Lead currLead : leadList){
+            
+            accountIds.add(currLead.Account__c);
+            
+        }
+        
+        
+        system.debug('accountIds: '+accountIds);
+        
+        List<Opportunity> oppList  = [Select ID, Name, StageName From Opportunity Where AccountId in :accountIds AND StageName != 'Purchase' AND StageName != 'Closed Lost'];
+        
+        system.debug('oppList: '+oppList);
+        
+        
+        //If only one open opp exists
+        If(oppList.size() > 0 && oppList.size() < 2){
+            
+            
+            try{
+                LeadStatus CLeadStatus = [SELECT Id, MasterLabel FROM LeadStatus WHERE IsConverted=true Limit 1];
+                List<Database.LeadConvert> MassLeadconvert = new List<Database.LeadConvert>();
+                
+                for(Lead currentlead: leadList){
+                    
+                    Database.LeadConvert Leadconvert = new Database.LeadConvert();
+                    Leadconvert.setLeadId(currentlead.id);                
+                    Leadconvert.setConvertedStatus(CLeadStatus.MasterLabel);
+                    //don't create opportunity
+                    Leadconvert.setDoNotCreateOpportunity(TRUE);
+                    MassLeadconvert.add(Leadconvert);
+                    
+                    
+                    
+                }
+                
+                if (!MassLeadconvert.isEmpty()) {
+                    List<Database.LeadConvertResult> lcr = Database.convertLead(MassLeadconvert);
+                }
+            }
+            
+            catch(Exception e){
+                String sub3 = 'Exception Thrown - Fail to Convert Lead';
+                String body3 = 'Exception Thrown - Fail to Convert Lead: ' + e.getMessage() + '\n Stack Trace: ' + e.getStackTraceString();
+                errorHandler(sub3,body3);
+                
+                
+            }
+            
+            List<Lead> newLeadList = [SELECT Id, Name, Lead_Owner_Email__c, ConvertedContactId, Lead_Owner_First_Name__c  FROM Lead WHERE Id in :leadList]; 
+            
+            system.debug('newLeadList: '+newLeadList);
+            
+            List<ID> contactIds = new List<ID>();
+            
+            for(Lead l : newLeadList){
+                contactIds.add(l.ConvertedContactId);
+                
+            }
+            
+            
+            system.debug('contactIds: '+contactIds);
+            
+            
+            
+            try{
+                Opportunity firstOpp = oppList[0];
+                
+                system.debug('firstOpp: '+firstOpp);
+                
+                List<Contact> contList = [Select Id FROM Contact WHERE ID = :contactIds];
+                
+                system.debug('contList: '+contList);
+                
+                
+                List<OpportunityContactRole> oppContactRoleList = new List<OpportunityContactRole>();
+                
+                
+                
+                for(Contact cont : contList){
+                    
+                    OpportunityContactRole contactRole = new OpportunityContactRole();
+                    
+                    contactRole.Role = 'Influencer';
+                    contactRole.ContactId = cont.id;
+                    contactRole.OpportunityId = firstOpp.id;
+                    
+                    
+                    oppContactRoleList.add(contactRole);
+                    
+                    
+                }
+                
+                
+                
+                
+                system.debug('oppContactRoleList: '+oppContactRoleList);
+                
+                insert oppContactRoleList;
+                
+            }
+            
+            catch(Exception e){
+                String sub3 = 'Exception Thrown - Inserting Contact Role';
+                String body3 = 'Exception Thrown - Inserting Contact Role: ' + e.getMessage() + '\n Stack Trace: ' + e.getStackTraceString();
+                errorHandler(sub3,body3);
+            }
+            
+            //send email to lead owner after conversion
+            for(Lead lead : newLeadList){
+                
+                String subject = 'Lead already associated with your account!';
+                String body = 'Hey' + lead.Lead_Owner_First_Name__c + ',' + 
+                    '\n\nI just received a lead that is actually yours to reach out to! I completed the dupe check and found that you currently have an open opportunity with them, but they completed another lead request. '  + 
+                    '\n\nHere is a link to the lead record: ' + 'https://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ lead.Id+'/view' + 
+                    '\n\nI have also reassigned you as the new lead owner in Salesforce. Please note that I did NOT reach out to the lead at all yet - it is yours to now work!'+
+                    '\nPlease let me know if you have any questions. '+
+                    '\n\nThanks!';
+                
+                String address = lead.Lead_Owner_Email__c;
+                
+                sendEmail(subject, body, address);
+                
+                
+            }
+            
+        }
+        
+        
+        
+        
+        
+        
+        
+        //If more than one open opp:
+        If(oppList.size() > 1){
+            
+            for(Lead l : leadList){
+                
+                String subject = 'Lead already associated with your account!';
+                String body = 'Hey, ' + l.Lead_Owner_First_Name__c + ',' + 
+                    '\n\nThis lead came inbound for a school that you are actively selling: '  + 
+                    '\n\nhttps://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view'+
+                    '\n\nOur automation typically converts this to your open opportunity with the school, but there is more than 1 open opportunity for the school and we want to convert this lead to the opportunity that this individual is related to. '+
+                    '\nThanks!';
+                
+                String address = l.Lead_Owner_Email__c;
+                
+                sendEmail(subject, body, address);
+                
+                
+                
+                
+            }
+            
+            system.debug('If more than one open opp');
+            
+        }
+        
+        
+        //If no open opp exists:
+        If(oppList.isEmpty() == TRUE){
+            
+            for(Lead l : leadList){
+                
+                String subject = 'No open opps on this Lead';
+                String body = 'Hey, ' + 
+                    '\n\nYou marked a lead as open pipeline that doesn’t have any open opportunities attached. Aka - you messed up.  '  +
+                    '\n\nCan you please fix it? Here is the lead record: '+
+                    'https://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view' +
+                    '\n\nThanks!';
+                
+                String address = l.Lead_Owner_Manager_Email__c;
+                
+                sendEmail(subject, body, address);
+                
+            }
+            
+            
+            system.debug('If no open opp exists:');
+            
+            
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    }
+    
+    public static void errorHandler(String sub, String body){
+        
+        List<String> errorEmailList = new List<String>{'salesops@goguardian.com'};
+            Messaging.SingleEmailMessage msg = new Messaging.SingleEmailMessage();
+        
+        msg.setSubject(sub);
+        msg.setToAddresses(errorEmailList);
+        msg.setPlainTextBody(body);
+        Messaging.sendEmail(new List<Messaging.SingleEmailMessage> { msg }, false);
+        
+    }
+    
+    public static void sendEmail(String subject, String body, String address){
+        
+        List<String> emailList = new List<String>{address};
+            Messaging.SingleEmailMessage msg = new Messaging.SingleEmailMessage();
+        
+        msg.setSubject(subject);
+        msg.setToAddresses(emailList);
+        msg.setPlainTextBody(body);
+        Messaging.sendEmail(new List<Messaging.SingleEmailMessage> { msg }, false);
+        
+    }
+    
+}
