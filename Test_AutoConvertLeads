@@ -1,0 +1,61 @@
+@IsTest
+public class Test_AutoConvertLeads {
+    
+    @testSetup
+    public static void setupTests(){
+        
+        Account acct = new Account(Name = 'Test acct');
+        
+        insert acct;
+        
+        Lead lead = new Lead(FirstName = 'Test', LastName = 'Sam45', Company = 'Test', Account__c = acct.id, Windows_Devices__c = 0);
+        
+        insert lead;
+        
+        Opportunity openOpp = new Opportunity(Name = 'test open opp', StageName = 'Defined', CloseDate = System.today(), AccountId = acct.id);
+        
+        insert openOpp;
+        
+    }
+    
+    public static testMethod void oneOpenOpp(){
+        
+        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        
+        getLead.Lead_Validity__c = 'Open Pipeline';
+        
+        update getLead;
+        
+    }
+    
+    public static testMethod void moreThanOneOpenOpp(){
+        
+        Account getAccount = [Select Id, Name FROM Account WHERE Name = 'Test acct' LIMIT 1];
+        
+        Opportunity openOpp2 = new Opportunity(Name = 'test open opp', StageName = 'Defined', CloseDate = System.today(), AccountId = getAccount.id);
+        
+        insert openOpp2;
+        
+        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        
+        getLead.Lead_Validity__c = 'Open Pipeline';
+        
+        update getLead;
+        
+    }
+    
+    public static testMethod void noOpenOpps(){
+        
+        Opportunity getOpp = [Select Id, Name FROM Opportunity WHERE Name = 'test open opp' LIMIT 1];
+        
+        delete getOpp;
+        
+        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        
+        getLead.Lead_Validity__c = 'Open Pipeline';
+        
+        update getLead;
+        
+    }
+    
+}
