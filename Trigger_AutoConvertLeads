@@ -1,0 +1,15 @@
+trigger Trigger_AutoConvertLeads on Lead (after update) {
+    
+    //List<Lead> leadList = Trigger.new;
+    
+    for(Lead l : Trigger.new){
+        
+        if (l.Lead_Validity__c == 'Open Pipeline' && l.IsConverted == FALSE){
+            
+            AutoConvertLeads.LeadAssign(Trigger.new);
+        }
+    }
+    
+    
+
+}
