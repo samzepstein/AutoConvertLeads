@@ -30,6 +30,8 @@ public class Test_AutoConvertLeads {
     
     public static testMethod void moreThanOneOpenOpp(){
         
+        Test.startTest();
+        
         Account getAccount = [Select Id, Name FROM Account WHERE Name = 'Test acct' LIMIT 1];
         
         Opportunity openOpp2 = new Opportunity(Name = 'test open opp', StageName = 'Defined', CloseDate = System.today(), AccountId = getAccount.id);
@@ -42,9 +44,13 @@ public class Test_AutoConvertLeads {
         
         update getLead;
         
+        Test.stopTest();
+        
     }
     
     public static testMethod void noOpenOpps(){
+        
+        Test.startTest();
         
         Opportunity getOpp = [Select Id, Name FROM Opportunity WHERE Name = 'test open opp' LIMIT 1];
         
@@ -55,6 +61,8 @@ public class Test_AutoConvertLeads {
         getLead.Lead_Validity__c = 'Open Pipeline';
         
         update getLead;
+        
+        Test.stopTest();
         
     }
     
