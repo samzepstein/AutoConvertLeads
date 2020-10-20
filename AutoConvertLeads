@@ -7,81 +7,187 @@ public class AutoConvertLeads {
         
         
         for(Lead currLead : leadList){
+           
             
             accountIds.add(currLead.Account__c);
             
         }
         
         
+        
         system.debug('accountIds: '+accountIds);
         
-        List<Opportunity> oppList  = [Select ID, Name, StageName From Opportunity Where AccountId in :accountIds AND StageName != 'Purchase' AND StageName != 'Closed Lost'];
+        List<AggregateResult> oppList  = [Select AccountId, COUNT(ID) numOpps
+                                          From Opportunity 
+                                          Where AccountId in :accountIds 
+                                          AND StageName != 'Purchase' 
+                                          AND StageName != 'Closed Lost'
+                                          GROUP BY AccountId];
+        
+        Map<Id, Integer> oppCountMap = new Map<Id, Integer>();
+        
+        for(AggregateResult opp : oppList){
+            oppCountMap.put((Id)opp.get('AccountId'),(Integer)opp.get('numOpps'));
+        }
+        
+        List<Lead> noOpps = new List<Lead>();
+        
+        List<Lead> oneOpp = new List<Lead>();
+        
+        List<Lead> moreOpps = new List<Lead>();
+        
+        
+        List<String> oneOppleadEmails = new List<String>();
+        
+        List<ID> oneOppLeadAccountIds = new List<ID>();
+        
+        
+        
+        for(Lead currLead : leadList){
+            
+            if(oppCountMap.containsKey(currLead.Account__c)){
+                Integer count = oppCountMap.get(currLead.Account__c);
+                if(count == 1){
+                    oneOpp.add(currLead);
+                    oneOppleadEmails.add(currLead.Email);
+                    oneOppLeadAccountIds.add(currLead.Account__r.id);
+                }
+                else{
+                    moreOpps.add(currLead);
+                }
+            }
+            else{
+                noOpps.add(currLead);
+            }
+        }
         
         system.debug('oppList: '+oppList);
         
+        system.debug('oneOpp: '+oneOpp);
         
-        //If only one open opp exists
-        If(oppList.size() > 0 && oppList.size() < 2){
+        system.debug('moreOpps: '+moreOpps);
+        
+        system.debug('noOpps: '+noOpps);
+        
+        system.debug('oppCountMap: '+oppCountMap);
+        
+        
+        List<Contact> existingContactList = [SELECT ID, FirstName, LastName, Email, AccountId 
+                                             FROM Contact 
+                                             WHERE AccountId IN :oneOppLeadAccountIds
+                                             AND Email IN :oneOppleadEmails];
+        
+        system.debug('existingContactList: '+existingContactList);
+        
+        Map<String,Id> contactCompKey = new Map<String,Id>();
+        
+        List<Opportunity> oneOppList = [SELECT ID, AccountId FROM Opportunity 
+                                        WHERE AccountID IN :oneOppLeadAccountIds 
+                                        AND StageName != 'Purchase' 
+                                        AND StageName != 'Closed Lost'];
+        
+        
+        Map<ID,ID> accountOppMap = new Map<ID, ID>();
+        
+        for(Opportunity oppy : oneOppList ){
             
+            accountOppMap.put(oppy.AccountId, oppy.id);
+            
+            
+        }
+        
+        
+        for(Contact cont : existingContactList  ){
+            
+            
+            contactCompKey.put(cont.AccountId + cont.Email, cont.id);
+            
+            
+        }
+        
+        system.debug('accountOppMap: ' +accountOppMap);
+        
+        
+        if(oneOpp.size() > 0){
             
             try{
                 LeadStatus CLeadStatus = [SELECT Id, MasterLabel FROM LeadStatus WHERE IsConverted=true Limit 1];
                 List<Database.LeadConvert> MassLeadconvert = new List<Database.LeadConvert>();
                 
-                for(Lead currentlead: leadList){
+                
+                for(Lead currentlead: oneOpp){
                     
                     Database.LeadConvert Leadconvert = new Database.LeadConvert();
+                    
+                    String leadCompKey = currentlead.Account__c + currentlead.Email;
+                    
+                    if(contactCompKey.containsKey(leadCompKey)){
+                        
+                        Leadconvert.setContactId(contactCompKey.get(leadCompKey));
+                    }
+                    
+                    
                     Leadconvert.setLeadId(currentlead.id);                
+                    Leadconvert.setAccountId(currentlead.Account__c);
                     Leadconvert.setConvertedStatus(CLeadStatus.MasterLabel);
                     //don't create opportunity
                     Leadconvert.setDoNotCreateOpportunity(TRUE);
                     MassLeadconvert.add(Leadconvert);
                     
-                    
-                    
                 }
+                
                 
                 if (!MassLeadconvert.isEmpty()) {
                     List<Database.LeadConvertResult> lcr = Database.convertLead(MassLeadconvert);
                 }
+                
             }
-            
             catch(Exception e){
                 String sub3 = 'Exception Thrown - Fail to Convert Lead';
                 String body3 = 'Exception Thrown - Fail to Convert Lead: ' + e.getMessage() + '\n Stack Trace: ' + e.getStackTraceString();
                 errorHandler(sub3,body3);
                 
-                
             }
-            
-            List<Lead> newLeadList = [SELECT Id, Name, Lead_Owner_Email__c, ConvertedContactId, Lead_Owner_First_Name__c  FROM Lead WHERE Id in :leadList]; 
-            
-            system.debug('newLeadList: '+newLeadList);
-            
-            List<ID> contactIds = new List<ID>();
-            
-            for(Lead l : newLeadList){
-                contactIds.add(l.ConvertedContactId);
-                
-            }
-            
-            
-            system.debug('contactIds: '+contactIds);
-            
-            
             
             try{
-                Opportunity firstOpp = oppList[0];
                 
-                system.debug('firstOpp: '+firstOpp);
+                List<Lead> newLeadList = [SELECT Id, Name, Lead_Owner_Email__c, ConvertedContactId, Lead_Owner_First_Name__c  FROM Lead WHERE Id in :oneOpp]; 
                 
-                List<Contact> contList = [Select Id FROM Contact WHERE ID = :contactIds];
+                system.debug('newLeadList: '+newLeadList);
+                
+                List<ID> convertedContactIds = new List<ID>();
+                
+                
+                for(Lead l : newLeadList){
+                    
+                    //send email to lead owner after conversion
+                    String subject = 'Lead already associated with your account!';
+                    String body = 'Hey ' + l.Lead_Owner_First_Name__c + ',' + 
+                        '\n\nI just received a lead that is actually yours to reach out to! I completed the dupe check and found that you currently have an open opportunity with them, but they completed another lead request. '  + 
+                        '\n\nHere is a link to the lead record: ' + 'https://goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view' + 
+                        '\n\nI have also reassigned you as the new lead owner in Salesforce. Please note that I did NOT reach out to the lead at all yet - it is yours to now work!'+
+                        '\nPlease let me know if you have any questions. '+
+                        '\n\nThanks!';
+                    
+                    String address = l.Lead_Owner_Email__c;
+                    
+                    sendEmail(subject, body, address);
+                    
+                    //add converted contact ID to list
+                    convertedContactIds.add(l.ConvertedContactId);
+                    
+                }
+                
+                
+                
+                system.debug('convertedContactIds: '+convertedContactIds); 
+                
+                List<Contact> contList = [Select Id, AccountId FROM Contact WHERE ID = :convertedContactIds];
                 
                 system.debug('contList: '+contList);
                 
                 
                 List<OpportunityContactRole> oppContactRoleList = new List<OpportunityContactRole>();
-                
                 
                 
                 for(Contact cont : contList){
@@ -90,9 +196,8 @@ public class AutoConvertLeads {
                     
                     contactRole.Role = 'Influencer';
                     contactRole.ContactId = cont.id;
-                    contactRole.OpportunityId = firstOpp.id;
-                    
-                    
+                    //where to get oppid
+                    contactRole.OpportunityId = accountOppMap.get(cont.AccountId);
                     oppContactRoleList.add(contactRole);
                     
                     
@@ -107,47 +212,31 @@ public class AutoConvertLeads {
                 
             }
             
+            
             catch(Exception e){
                 String sub3 = 'Exception Thrown - Inserting Contact Role';
                 String body3 = 'Exception Thrown - Inserting Contact Role: ' + e.getMessage() + '\n Stack Trace: ' + e.getStackTraceString();
                 errorHandler(sub3,body3);
             }
             
-            //send email to lead owner after conversion
-            for(Lead lead : newLeadList){
-                
-                String subject = 'Lead already associated with your account!';
-                String body = 'Hey' + lead.Lead_Owner_First_Name__c + ',' + 
-                    '\n\nI just received a lead that is actually yours to reach out to! I completed the dupe check and found that you currently have an open opportunity with them, but they completed another lead request. '  + 
-                    '\n\nHere is a link to the lead record: ' + 'https://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ lead.Id+'/view' + 
-                    '\n\nI have also reassigned you as the new lead owner in Salesforce. Please note that I did NOT reach out to the lead at all yet - it is yours to now work!'+
-                    '\nPlease let me know if you have any questions. '+
-                    '\n\nThanks!';
-                
-                String address = lead.Lead_Owner_Email__c;
-                
-                sendEmail(subject, body, address);
-                
-                
-            }
+            
+            
             
         }
         
         
         
         
-        
-        
-        
         //If more than one open opp:
-        If(oppList.size() > 1){
+        If(moreOpps.size() == 1){
             
             for(Lead l : leadList){
+                
                 
                 String subject = 'Lead already associated with your account!';
                 String body = 'Hey, ' + l.Lead_Owner_First_Name__c + ',' + 
                     '\n\nThis lead came inbound for a school that you are actively selling: '  + 
-                    '\n\nhttps://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view'+
+                    '\n\nhttps://goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view'+
                     '\n\nOur automation typically converts this to your open opportunity with the school, but there is more than 1 open opportunity for the school and we want to convert this lead to the opportunity that this individual is related to. '+
                     '\nThanks!';
                 
@@ -155,18 +244,19 @@ public class AutoConvertLeads {
                 
                 sendEmail(subject, body, address);
                 
-                
-                
+                //l.Running_Auto_Convert_Open_Pipeline_Lead__c = FALSE;
                 
             }
             
-            system.debug('If more than one open opp');
+            //update leadList;
+            
+            
             
         }
         
         
         //If no open opp exists:
-        If(oppList.isEmpty() == TRUE){
+        If(noOpps.size() == 1 ){
             
             for(Lead l : leadList){
                 
@@ -174,30 +264,25 @@ public class AutoConvertLeads {
                 String body = 'Hey, ' + 
                     '\n\nYou marked a lead as open pipeline that doesn’t have any open opportunities attached. Aka - you messed up.  '  +
                     '\n\nCan you please fix it? Here is the lead record: '+
-                    'https://goguardian--goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view' +
+                    'https://goguardian.lightning.force.com/lightning/r/Lead/'+ l.Id+'/view' +
                     '\n\nThanks!';
                 
                 String address = l.Lead_Owner_Manager_Email__c;
                 
                 sendEmail(subject, body, address);
+
                 
             }
+
             
-            
-            system.debug('If no open opp exists:');
             
             
         }
-        
-        
-        
-        
-        
-        
-        
-        
-        
     }
+    
+    
+    
+    
     
     public static void errorHandler(String sub, String body){
         
@@ -222,5 +307,7 @@ public class AutoConvertLeads {
         Messaging.sendEmail(new List<Messaging.SingleEmailMessage> { msg }, false);
         
     }
+    
+    
     
 }
