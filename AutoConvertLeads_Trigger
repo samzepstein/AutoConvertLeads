@@ -1,0 +1,22 @@
+trigger AutoConvertLeads_Trigger on Lead (after update) {
+    
+    
+    List<Lead> leadList = new List<Lead>();
+    for(Lead lead : Trigger.new){
+        
+        if (lead.Running_Auto_Convert_Open_Pipeline_Lead__c == TRUE && lead.isConverted == FALSE){
+
+            
+            leadList.add(lead);
+            
+            
+        }
+    }
+    
+    
+    AutoConvertLeads.LeadAssign(leadList);
+    
+    
+    
+}
+
