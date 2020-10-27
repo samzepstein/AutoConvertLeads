@@ -1,0 +1,50 @@
+@isTest
+public class Test_InvocableAutoConvertLeads {
+    
+    @testSetup 
+    public static void setupTests(){
+        
+        
+        Lead lead = new Lead(FirstName = 'Test', LastName = 'Sam45', Company = 'Test');
+        
+        insert lead;
+        
+    }
+    
+    
+    
+    public static testMethod void Test_InvocableAutoConvertMethod() {
+        
+
+        Test.startTest();
+        
+        List<Lead> leadList = new List<Lead>();
+        
+        Lead getLead = [Select Id, Name, Lead_Validity__c, Account__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        
+        /*
+        
+        List<AutoConvertLeads_Invocable.ConvertLeadActionRequest> requests = new List<AutoConvertLeads_Invocable.ConvertLeadActionRequest>();
+        
+        AutoConvertLeads_Invocable.ConvertLeadActionRequest acl = new AutoConvertLeads_Invocable.ConvertLeadActionRequest();
+
+*/
+        
+        //acl.leadRecord = getLead;
+        
+        //requests.add(acl);
+        //
+        
+        
+        leadList.add(getLead);
+        AutoConvertLeads_Invocable.autoConvertLead(leadList);
+        
+        
+        
+        Test.stopTest();
+        
+        
+        
+    }
+    
+}
