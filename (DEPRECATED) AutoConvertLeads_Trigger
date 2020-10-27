@@ -1,11 +1,11 @@
-trigger AutoConvertLeads_Trigger on Lead (after update) {
+trigger AutoConvertLeads_Trigger on Lead (after delete) {
     
     
     List<Lead> leadList = new List<Lead>();
     for(Lead lead : Trigger.new){
         
         if (lead.Running_Auto_Convert_Open_Pipeline_Lead__c == TRUE && lead.isConverted == FALSE){
-
+            
             
             leadList.add(lead);
             
@@ -13,10 +13,13 @@ trigger AutoConvertLeads_Trigger on Lead (after update) {
         }
     }
     
-    
-    AutoConvertLeads.LeadAssign(leadList);
+    if(leadList.size() > 0){
+        
+        
+        AutoConvertLeads.LeadAssign(leadList);
+        
+    }
     
     
     
 }
-
