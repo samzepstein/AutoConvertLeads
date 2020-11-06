@@ -4,6 +4,8 @@ public class Test_AutoConvertLeads {
     @testSetup
     public static void setupTests(){
         
+        Test.startTest();
+        
         Account acct = new Account(Name = 'Test acct');
         
         insert acct;
@@ -12,23 +14,43 @@ public class Test_AutoConvertLeads {
         
         insert lead;
         
-        Opportunity openOpp = new Opportunity(Name = 'test open opp', StageName = 'Defined', CloseDate = System.today(), AccountId = acct.id);
         
-        insert openOpp;
+        Test.stopTest();
         
     }
     
     public static testMethod void oneOpenOpp(){
         
-        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        List<Lead> leadList = new List<Lead>();
         
-        getLead.Lead_Validity__c = 'Open Pipeline';
+        Test.startTest();
+        
+        Account getAccount = [Select Id, Name FROM Account WHERE Name = 'Test acct' LIMIT 1];
+        
+        Lead getLead = [Select Id, Name, Account__r.id, Email, Lead_Validity__c, Account__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        
+        getLead.Running_Auto_Convert_Open_Pipeline_Lead__c = TRUE;
         
         update getLead;
+        
+        Opportunity openOpp = new Opportunity(Name = 'test open opp', StageName = 'Defined', CloseDate = System.today(), AccountId = getAccount.id);
+        
+        insert openOpp;
+        
+        
+        
+        leadList.add(getLead);
+        
+        AutoConvertLeads.LeadAssign(leadList);
+        
+        Test.stopTest();
+        
         
     }
     
     public static testMethod void moreThanOneOpenOpp(){
+        
+        List<Lead> leadList = new List<Lead>();
         
         Test.startTest();
         
@@ -38,29 +60,40 @@ public class Test_AutoConvertLeads {
         
         insert openOpp2;
         
-        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        Lead getLead = [Select Id, Name, Email, Lead_Validity__c, Account__r.id, Account__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
         
-        getLead.Lead_Validity__c = 'Open Pipeline';
+        getLead.Running_Auto_Convert_Open_Pipeline_Lead__c = TRUE;
         
         update getLead;
         
+        leadList.add(getLead);
+        
+        AutoConvertLeads.LeadAssign(leadList);
+        
         Test.stopTest();
+        
+        
         
     }
     
     public static testMethod void noOpenOpps(){
         
+        
+        
         Test.startTest();
         
-        Opportunity getOpp = [Select Id, Name FROM Opportunity WHERE Name = 'test open opp' LIMIT 1];
+        List<Lead> leadList = new List<Lead>();
         
-        delete getOpp;
         
-        Lead getLead = [Select Id, Name, Lead_Validity__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
+        Lead getLead = [Select Id, Email, Name, Lead_Validity__c, Account__r.id, Account__c FROM  Lead WHERE LastName = 'Sam45' LIMIT 1];
         
-        getLead.Lead_Validity__c = 'Open Pipeline';
+        getLead.Running_Auto_Convert_Open_Pipeline_Lead__c = TRUE;
         
         update getLead;
+        
+        leadList.add(getLead);
+        
+        AutoConvertLeads.LeadAssign(leadList);
         
         Test.stopTest();
         
