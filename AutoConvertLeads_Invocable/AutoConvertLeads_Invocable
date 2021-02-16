@@ -1,13 +1,29 @@
 global class AutoConvertLeads_Invocable {
     
     
-    
+    //exclued pear deck leads
     @InvocableMethod(label='Convert Leads' description='auto convert open pipeline leads')
     global static void autoConvertLead(List<lead> leadList) {
         
         
-        
-        AutoConvertLeads.LeadAssign(leadList);
+        list<Lead> nonPearDeckLeadList = new list<Lead>();
+        for(Lead lead : leadList){
+            
+            Boolean pearDeckLead = lead.MQL_Reason__c.contains('Pear Deck');
+            
+            system.debug('pearDeckLead: '+ pearDeckLead);
+            
+            if(!pearDeckLead){
+                
+                nonPearDeckLeadList.add(lead);
+                
+            }
+            
+        }
+        system.debug('nonPearDeckLeadList.size()'+nonPearDeckLeadList.size());
+        if(nonPearDeckLeadList.size() > 0){
+            AutoConvertLeads.LeadAssign(leadList);
+        }
         
     }
     
@@ -18,11 +34,3 @@ global class AutoConvertLeads_Invocable {
     
     
 }
-
-
-
-
-
-
-
-
